@@ -65,6 +65,15 @@ const SQL = `
 
   ALTER TABLE submissions ADD COLUMN IF NOT EXISTS area TEXT;
 
+  CREATE TABLE IF NOT EXISTS senders (
+    page_id     TEXT NOT NULL,
+    sender_psid TEXT NOT NULL,
+    name        TEXT,
+    profile_pic TEXT,
+    fetched_at  TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (page_id, sender_psid)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_submissions_page_id    ON submissions(page_id);
   CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at);
   CREATE INDEX IF NOT EXISTS idx_activities_created_at  ON activities(created_at);

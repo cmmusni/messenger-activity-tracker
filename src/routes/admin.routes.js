@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const { listPages, upsertPage, deletePage, getAccessToken } = require('../services/pages.service');
 const { listSubmissions, DEFAULT_PROFILE } = require('../services/conversation.service');
 const { installMessengerProfile } = require('../services/messenger.service');
+const { getSenderProfiles } = require('../services/senders.service');
 const {
   issueSession,
   clearSession,
@@ -77,6 +78,9 @@ function layout(title, body, opts = {}) {
     .ok { background: #064e3b; color: #d1fae5; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
     .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #0b1220; color: var(--muted); }
     img.thumb { max-width: 64px; max-height: 64px; border-radius: 4px; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+    .sender { display: flex; gap: 8px; align-items: center; }
+    .sender-name { font-weight: 500; margin-bottom: 2px; }
     .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
     .filters input, .filters select { padding: 6px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
     a.btn { color: var(--accent); text-decoration: none; font-size: 13px; }
@@ -167,6 +171,11 @@ router.get('/admin/submissions', async (req, res, next) => {
     const { page_id, type } = req.query;
     const data = await listSubmissions({ page_id, type, limit: 200 });
     const pagesList = await listPages();
+
+    // Resolve sender display names (cached, with weekly refresh).
+    const senderMap = await getSenderProfiles(
+      data.items.map((s) => ({ pageId: s.page_id, psid: s.sender_psid }))
+    );
     const pageOptions = ['<option value="">All pages</option>']
       .concat(
         pagesList.map(
@@ -187,8 +196,13 @@ router.get('/admin/submissions', async (req, res, next) => {
       .join('');
 
     const rows = data.items
-      .map(
-        (s) => `<tr>
+      .map((s) => {
+        const prof = senderMap.get(`${s.page_id}:${s.sender_psid}`) || {};
+        const name = prof.name || '(unknown)';
+        const avatar = prof.profile_pic
+          ? `<img class="avatar" src="${escapeHtml(prof.profile_pic)}" alt=""/>`
+          : '';
+        return `<tr>
           <td>#${s.id}</td>
           <td>${escapeHtml(s.type)}</td>
           <td>${escapeHtml(s.area || '—')}</td>
@@ -200,10 +214,15 @@ router.get('/admin/submissions', async (req, res, next) => {
               ? `<a href="${escapeHtml(s.image_url)}" target="_blank"><img class="thumb" src="${escapeHtml(s.image_url)}" alt="img"/></a>`
               : '<span class="pill">none</span>'
           }</td>
-          <td><span class="pill">${escapeHtml(s.page_id)}</span><br/><span class="pill">${escapeHtml(s.sender_psid)}</span></td>
+          <td>
+            <div class="sender">${avatar}<div>
+              <div class="sender-name">${escapeHtml(name)}</div>
+              <span class="pill" title="PSID">${escapeHtml(s.sender_psid)}</span>
+            </div></div>
+          </td>
           <td>${escapeHtml(new Date(s.created_at).toLocaleString())}</td>
-        </tr>`
-      )
+        </tr>`;
+      })
       .join('');
 
     const body = `
@@ -220,7 +239,7 @@ router.get('/admin/submissions', async (req, res, next) => {
           ? '<div class="empty">No submissions yet.</div>'
           : `<table>
               <thead><tr>
-                <th>ID</th><th>Type</th><th>Area</th><th>Details</th><th>Location</th><th>Attendees</th><th>Image</th><th>Page / Sender</th><th>Created</th>
+                <th>ID</th><th>Type</th><th>Area</th><th>Details</th><th>Location</th><th>Attendees</th><th>Image</th><th>Sender</th><th>Created</th>
               </tr></thead>
               <tbody>${rows}</tbody>
             </table>`
