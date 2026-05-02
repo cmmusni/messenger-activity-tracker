@@ -2,7 +2,9 @@
 
 const express = require('express');
 const { adminAuth } = require('../middleware/adminAuth');
-const { upsertPage, listPages, deletePage } = require('../services/pages.service');
+const { upsertPage, listPages, deletePage, getAccessToken } = require('../services/pages.service');
+const { installMessengerProfile } = require('../services/messenger.service');
+const { DEFAULT_PROFILE } = require('../services/conversation.service');
 
 const router = express.Router();
 
@@ -38,6 +40,26 @@ router.delete('/pages/:pageId', async (req, res, next) => {
     const ok = await deletePage(req.params.pageId);
     if (!ok) return res.status(404).json({ error: 'Not found' });
     res.json({ deleted: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Install Get Started + persistent menu + greeting on the page.
+ * Body may optionally override DEFAULT_PROFILE.
+ */
+router.post('/pages/:pageId/profile', async (req, res, next) => {
+  try {
+    const { pageId } = req.params;
+    const accessToken = await getAccessToken(pageId);
+    if (!accessToken) {
+      return res.status(404).json({ error: 'Page not found or has no access token' });
+    }
+    const profile = req.body && Object.keys(req.body).length > 0 ? req.body : DEFAULT_PROFILE;
+    const result = await installMessengerProfile(profile, { accessToken });
+    if (!result.ok) return res.status(502).json({ error: result.error, status: result.status });
+    res.json({ installed: true, profile, meta: result.data });
   } catch (err) {
     next(err);
   }

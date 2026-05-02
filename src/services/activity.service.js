@@ -4,6 +4,7 @@ const { query } = require('../db/database');
 const { classify } = require('./classifier.service');
 const { sendTextMessage } = require('./messenger.service');
 const { getAccessToken } = require('./pages.service');
+const { handleEvent: handleConversationEvent } = require('./conversation.service');
 const config = require('../config');
 const logger = require('../utils/logger');
 const { nowIso } = require('../utils/dates');
@@ -108,7 +109,17 @@ async function processMessagingEvent(pageId, ev) {
   const inserted = result.rowCount > 0;
   logger.info('Activity stored:', { inserted, category: parsed.category, sender: senderPsid });
 
-  if (inserted && config.enableAutoReply && eventType === 'message' && senderPsid) {
+  // Run the conversational flow (Get Started / Record Activity / quick replies).
+  // If the flow handled the event, suppress the legacy auto-reply so we don't
+  // stomp on the bot prompts.
+  let flowHandled = false;
+  try {
+    flowHandled = await handleConversationEvent(pageId, senderPsid, ev);
+  } catch (err) {
+    logger.error('conversation flow failed:', err.message);
+  }
+
+  if (!flowHandled && inserted && config.enableAutoReply && eventType === 'message' && senderPsid) {
     try {
       // Per-page token from DB takes precedence; fall back to env PAGE_ACCESS_TOKEN.
       const accessToken = (await getAccessToken(pageId)) || config.pageAccessToken || null;

@@ -16,6 +16,7 @@ const activitiesRoutes = require('./routes/activities.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const messagesRoutes = require('./routes/messages.routes');
 const pagesRoutes = require('./routes/pages.routes');
+const submissionsRoutes = require('./routes/submissions.routes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -67,6 +68,7 @@ app.use(activitiesRoutes);
 app.use(reportsRoutes);
 app.use(messagesRoutes);
 app.use(pagesRoutes);
+app.use(submissionsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not Found' }));
 app.use(errorHandler);
