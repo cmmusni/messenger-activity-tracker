@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 const config = require('./config');
 const logger = require('./utils/logger');
@@ -17,6 +18,7 @@ const reportsRoutes = require('./routes/reports.routes');
 const messagesRoutes = require('./routes/messages.routes');
 const pagesRoutes = require('./routes/pages.routes');
 const submissionsRoutes = require('./routes/submissions.routes');
+const adminRoutes = require('./routes/admin.routes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -31,6 +33,18 @@ app.use(
   })
 );
 app.use(morgan(config.isProduction ? 'combined' : 'dev'));
+app.use(cookieParser());
+
+// helmet's default CSP blocks inline styles; relax it for the /admin UI.
+app.use(
+  helmet.contentSecurityPolicy({
+    useDefaults: true,
+    directives: {
+      'img-src': ["'self'", 'https:', 'data:'],
+      'style-src': ["'self'", "'unsafe-inline'"],
+    },
+  })
+);
 
 // Capture raw body for signature validation; applies to all JSON requests.
 app.use(
@@ -69,6 +83,7 @@ app.use(reportsRoutes);
 app.use(messagesRoutes);
 app.use(pagesRoutes);
 app.use(submissionsRoutes);
+app.use(adminRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not Found' }));
 app.use(errorHandler);
