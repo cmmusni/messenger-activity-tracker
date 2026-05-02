@@ -45,9 +45,18 @@ async function processMessagingEvent(pageId, ev) {
 
   let text = null;
   let activityMessageId = messageId;
+  let attachmentSummary = null;
 
-  if (eventType === 'message' && ev.message && typeof ev.message.text === 'string') {
-    text = ev.message.text;
+  if (eventType === 'message' && ev.message) {
+    if (typeof ev.message.text === 'string' && ev.message.text.length > 0) {
+      text = ev.message.text;
+    }
+    if (Array.isArray(ev.message.attachments) && ev.message.attachments.length > 0) {
+      const types = ev.message.attachments.map((a) => a && a.type).filter(Boolean);
+      attachmentSummary = types.join(',');
+      // Synthesize a text label so the row carries useful info even when caption is empty.
+      if (!text) text = `[attachment:${attachmentSummary}]`;
+    }
   } else if (eventType === 'postback' && ev.postback) {
     text = ev.postback.payload || ev.postback.title || null;
     activityMessageId =
@@ -57,6 +66,13 @@ async function processMessagingEvent(pageId, ev) {
   if (!text) return;
 
   const parsed = classify(text);
+  // Tag attachment-only messages so they're easy to filter.
+  if (attachmentSummary) {
+    const tagSet = new Set(parsed.tags);
+    tagSet.add('attachment');
+    for (const t of attachmentSummary.split(',')) tagSet.add(t);
+    parsed.tags = Array.from(tagSet);
+  }
 
   const result = await query(
     `INSERT INTO activities (
