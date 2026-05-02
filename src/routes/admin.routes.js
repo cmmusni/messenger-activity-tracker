@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { listPages, upsertPage, deletePage, getAccessToken } = require('../services/pages.service');
-const { listSubmissions, DEFAULT_PROFILE } = require('../services/conversation.service');
+const { listSubmissions, getReportsData, DEFAULT_PROFILE } = require('../services/conversation.service');
 const { installMessengerProfile } = require('../services/messenger.service');
 const { getSenderProfiles } = require('../services/senders.service');
 const {
@@ -199,6 +199,15 @@ table.table tr:hover td { background: hsl(var(--accent) / 0.4); }
 
 .inline-form { display: inline; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 20px; }
+.stat-label { color: hsl(var(--muted-foreground)); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 8px; }
+.stat-value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 0; font-variant-numeric: tabular-nums; }
+.stat-sub { color: hsl(var(--muted-foreground)); font-size: 12px; margin: 4px 0 0; }
+.charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+.chart-box { position: relative; height: 280px; padding: 12px 4px 4px; }
 `;
 
 function layout(title, body, opts = {}) {
@@ -209,6 +218,7 @@ function layout(title, body, opts = {}) {
   const active = opts.active || '';
   const navLinks = `
     <a href="/admin/submissions" class="${active === 'submissions' ? 'active' : ''}">Submissions</a>
+    <a href="/admin/reports" class="${active === 'reports' ? 'active' : ''}">Reports</a>
     <a href="/admin/pages" class="${active === 'pages' ? 'active' : ''}">Pages</a>
   `;
   const topbar = opts.hideNav
@@ -419,6 +429,232 @@ router.get('/admin/submissions', async (req, res, next) => {
             </table></div>`
       }`;
     res.send(layout('Submissions', body, { user: req.adminSession.username, active: 'submissions' }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/reports', async (req, res, next) => {
+  try {
+    const { page_id, days } = req.query;
+    const d = parseInt(days, 10) || 30;
+    const data = await getReportsData({ page_id, days: d });
+    const pagesList = await listPages();
+
+    const senderMap = await getSenderProfiles(
+      data.topSenders.map((s) => ({ pageId: s.page_id, psid: s.sender_psid }))
+    );
+
+    const pageOptions = ['<option value="">All pages</option>']
+      .concat(
+        pagesList.map(
+          (p) =>
+            `<option value="${escapeHtml(p.page_id)}"${
+              p.page_id === page_id ? ' selected' : ''
+            }>${escapeHtml(p.page_name || p.page_id)}</option>`
+        )
+      )
+      .join('');
+    const dayOptions = [7, 30, 90, 180, 365]
+      .map(
+        (n) =>
+          `<option value="${n}"${n === d ? ' selected' : ''}>Last ${n} days</option>`
+      )
+      .join('');
+
+    const topSendersRows = data.topSenders.length
+      ? data.topSenders
+          .map((s) => {
+            const prof = senderMap.get(`${s.page_id}:${s.sender_psid}`) || {};
+            const name = prof.name || 'Unknown';
+            const initials = (prof.name || '?').split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+            const avatar = prof.profile_pic
+              ? `<div class="avatar"><img src="${escapeHtml(prof.profile_pic)}" alt=""/></div>`
+              : `<div class="avatar">${escapeHtml(initials)}</div>`;
+            return `<tr>
+              <td><div class="sender-cell">${avatar}<div><div class="sender-name">${escapeHtml(name)}</div><div class="sender-psid">${escapeHtml(s.sender_psid)}</div></div></div></td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;"><strong>${s.count}</strong></td>
+            </tr>`;
+          })
+          .join('')
+      : '<tr><td colspan="2" class="muted" style="text-align:center;padding:24px;">No data</td></tr>';
+
+    const chartData = {
+      byDay: data.byDay,
+      byType: data.byType,
+      byArea: data.byArea,
+    };
+
+    const body = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Reports</h1>
+          <p class="page-subtitle">Activity overview for the last ${d} days.</p>
+        </div>
+      </div>
+      <form class="filters" method="get">
+        <select class="select" name="page_id">${pageOptions}</select>
+        <select class="select" name="days">${dayOptions}</select>
+        <button type="submit" class="btn btn-outline btn-sm">Apply</button>
+        <a href="/admin/reports" class="btn btn-ghost btn-sm">Reset</a>
+      </form>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <p class="stat-label">Total submissions</p>
+          <p class="stat-value">${data.totals.total_submissions}</p>
+          <p class="stat-sub">in the last ${d} days</p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">Total attendees</p>
+          <p class="stat-value">${data.totals.total_attendees}</p>
+          <p class="stat-sub">summed across activities</p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">Unique senders</p>
+          <p class="stat-value">${data.totals.unique_senders}</p>
+          <p class="stat-sub">distinct PSIDs</p>
+        </div>
+        <div class="stat-card">
+          <p class="stat-label">Avg per day</p>
+          <p class="stat-value">${(data.totals.total_submissions / d).toFixed(1)}</p>
+          <p class="stat-sub">submissions / day</p>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Submissions over time</h3>
+            <p class="card-description">Daily breakdown by type</p>
+          </div>
+          <div class="card-content"><div id="chartTime" class="chart-box"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">By type</h3>
+            <p class="card-description">Distribution of activity types</p>
+          </div>
+          <div class="card-content"><div id="chartType" class="chart-box"></div></div>
+        </div>
+      </div>
+
+      <div class="charts-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">By area</h3>
+            <p class="card-description">Submissions per area</p>
+          </div>
+          <div class="card-content"><div id="chartArea" class="chart-box"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Top contributors</h3>
+            <p class="card-description">Most active senders</p>
+          </div>
+          <div class="card-content" style="padding: 0 24px 12px;">
+            <table class="table" style="background: transparent;">
+              <thead><tr><th>Sender</th><th style="text-align:right;">Submissions</th></tr></thead>
+              <tbody>${topSendersRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+      <script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
+      <script src="https://cdn.amcharts.com/lib/5/percent.js"></script>
+      <script src="https://cdn.amcharts.com/lib/5/themes/Dark.js"></script>
+      <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+      <script>
+      (function() {
+        var DATA = ${JSON.stringify(chartData)};
+
+        function applyTheme(root) {
+          root.setThemes([am5themes_Dark.new(root), am5themes_Animated.new(root)]);
+          root._logo && root._logo.dispose();
+        }
+
+        // Time-series stacked column chart
+        am5.ready(function() {
+          if (DATA.byDay.length) {
+            var root = am5.Root.new("chartTime");
+            applyTheme(root);
+            var chart = root.container.children.push(am5xy.XYChart.new(root, {
+              panX: false, panY: false, wheelX: "none", wheelY: "none", paddingLeft: 0, paddingRight: 0
+            }));
+            var xAxis = chart.xAxes.push(am5xy.CategoryAxis.new(root, {
+              categoryField: "day",
+              renderer: am5xy.AxisRendererX.new(root, { minGridDistance: 50 }),
+            }));
+            xAxis.data.setAll(DATA.byDay);
+            var yAxis = chart.yAxes.push(am5xy.ValueAxis.new(root, {
+              renderer: am5xy.AxisRendererY.new(root, {})
+            }));
+            function makeSeries(name, field, color) {
+              var series = chart.series.push(am5xy.ColumnSeries.new(root, {
+                name: name, xAxis: xAxis, yAxis: yAxis,
+                valueYField: field, categoryXField: "day", stacked: true,
+                fill: am5.color(color), stroke: am5.color(color),
+                tooltip: am5.Tooltip.new(root, { labelText: "{name}: {valueY}" }),
+              }));
+              series.data.setAll(DATA.byDay);
+            }
+            makeSeries("Home Church", "home_church", 0x60a5fa);
+            makeSeries("Cell Group", "cell_group", 0x34d399);
+            chart.set("cursor", am5xy.XYCursor.new(root, {}));
+            var legend = chart.children.push(am5.Legend.new(root, { centerX: am5.p50, x: am5.p50 }));
+            legend.data.setAll(chart.series.values);
+          } else {
+            document.getElementById("chartTime").innerHTML = '<p class="muted" style="text-align:center;padding:60px 0;">No data</p>';
+          }
+
+          // Type pie chart
+          if (DATA.byType.length) {
+            var root2 = am5.Root.new("chartType");
+            applyTheme(root2);
+            var chart2 = root2.container.children.push(am5percent.PieChart.new(root2, {
+              layout: root2.verticalLayout, innerRadius: am5.percent(50)
+            }));
+            var series2 = chart2.series.push(am5percent.PieSeries.new(root2, {
+              valueField: "count", categoryField: "type",
+            }));
+            series2.labels.template.set("forceHidden", true);
+            series2.ticks.template.set("forceHidden", true);
+            series2.data.setAll(DATA.byType);
+            var legend2 = chart2.children.push(am5.Legend.new(root2, { centerX: am5.p50, x: am5.p50, marginTop: 10 }));
+            legend2.data.setAll(series2.dataItems);
+          } else {
+            document.getElementById("chartType").innerHTML = '<p class="muted" style="text-align:center;padding:60px 0;">No data</p>';
+          }
+
+          // Area horizontal bar
+          if (DATA.byArea.length) {
+            var root3 = am5.Root.new("chartArea");
+            applyTheme(root3);
+            var chart3 = root3.container.children.push(am5xy.XYChart.new(root3, {
+              panX: false, panY: false, wheelX: "none", wheelY: "none"
+            }));
+            var yAxis3 = chart3.yAxes.push(am5xy.CategoryAxis.new(root3, {
+              categoryField: "area", renderer: am5xy.AxisRendererY.new(root3, { inversed: true })
+            }));
+            yAxis3.data.setAll(DATA.byArea);
+            var xAxis3 = chart3.xAxes.push(am5xy.ValueAxis.new(root3, {
+              renderer: am5xy.AxisRendererX.new(root3, {})
+            }));
+            var series3 = chart3.series.push(am5xy.ColumnSeries.new(root3, {
+              xAxis: xAxis3, yAxis: yAxis3, valueXField: "count", categoryYField: "area",
+              fill: am5.color(0x818cf8), stroke: am5.color(0x818cf8),
+              tooltip: am5.Tooltip.new(root3, { labelText: "{categoryY}: {valueX}" }),
+            }));
+            series3.data.setAll(DATA.byArea);
+          } else {
+            document.getElementById("chartArea").innerHTML = '<p class="muted" style="text-align:center;padding:60px 0;">No data</p>';
+          }
+        });
+      })();
+      </script>`;
+    res.send(layout('Reports', body, { user: req.adminSession.username, active: 'reports' }));
   } catch (err) {
     next(err);
   }

@@ -397,10 +397,68 @@ const DEFAULT_PROFILE = {
   ],
 };
 
+async function getReportsData({ page_id, days = 30 } = {}) {
+  const where = [];
+  const params = [];
+  if (page_id) {
+    params.push(page_id);
+    where.push(`page_id = $${params.length}`);
+  }
+  const d = Math.min(Math.max(parseInt(days, 10) || 30, 1), 365);
+  params.push(`${d} days`);
+  where.push(`created_at >= NOW() - $${params.length}::interval`);
+  const whereSql = `WHERE ${where.join(' AND ')}`;
+
+  const totalsSql = `SELECT
+      COUNT(*)::int AS total_submissions,
+      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS total_attendees,
+      COUNT(DISTINCT sender_psid)::int AS unique_senders
+    FROM submissions ${whereSql}`;
+
+  const byTypeSql = `SELECT type, COUNT(*)::int AS count,
+      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS attendees
+    FROM submissions ${whereSql}
+    GROUP BY type ORDER BY count DESC`;
+
+  const byAreaSql = `SELECT COALESCE(area, '(none)') AS area, COUNT(*)::int AS count,
+      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS attendees
+    FROM submissions ${whereSql}
+    GROUP BY COALESCE(area, '(none)') ORDER BY count DESC`;
+
+  const byDaySql = `SELECT DATE(created_at AT TIME ZONE 'UTC')::text AS day,
+      COUNT(*)::int AS count,
+      COUNT(*) FILTER (WHERE type = 'Home Church')::int AS home_church,
+      COUNT(*) FILTER (WHERE type = 'Cell Group')::int AS cell_group
+    FROM submissions ${whereSql}
+    GROUP BY day ORDER BY day ASC`;
+
+  const topSendersSql = `SELECT sender_psid, page_id, COUNT(*)::int AS count
+    FROM submissions ${whereSql}
+    GROUP BY sender_psid, page_id ORDER BY count DESC LIMIT 10`;
+
+  const [totals, byType, byArea, byDay, topSenders] = await Promise.all([
+    query(totalsSql, params),
+    query(byTypeSql, params),
+    query(byAreaSql, params),
+    query(byDaySql, params),
+    query(topSendersSql, params),
+  ]);
+
+  return {
+    days: d,
+    totals: totals.rows[0],
+    byType: byType.rows,
+    byArea: byArea.rows,
+    byDay: byDay.rows,
+    topSenders: topSenders.rows,
+  };
+}
+
 module.exports = {
   STATE,
   PAYLOAD,
   DEFAULT_PROFILE,
   handleEvent,
   listSubmissions,
+  getReportsData,
 };
