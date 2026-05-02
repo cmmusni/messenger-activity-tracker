@@ -50,12 +50,17 @@ app.use(
   })
 );
 
-// Lazily ensure DB schema before serving requests (works for serverless cold starts).
+// Health route is mounted BEFORE the migration middleware so liveness checks
+// never depend on DB connectivity.
+app.use(healthRoutes);
+
+// Lazily ensure DB schema before serving DB-backed requests (works for
+// serverless cold starts). The webhook GET handshake also runs after this,
+// but it only reads env config and is fine if migration succeeds.
 app.use((req, res, next) => {
   ensureMigrated().then(() => next()).catch((err) => next(err));
 });
 
-app.use(healthRoutes);
 app.use(webhookRoutes);
 app.use(activitiesRoutes);
 app.use(reportsRoutes);
