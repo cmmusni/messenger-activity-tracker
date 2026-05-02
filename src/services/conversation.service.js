@@ -411,17 +411,17 @@ async function getReportsData({ page_id, days = 30 } = {}) {
 
   const totalsSql = `SELECT
       COUNT(*)::int AS total_submissions,
-      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS total_attendees,
+      COALESCE(SUM(attendees), 0)::int AS total_attendees,
       COUNT(DISTINCT sender_psid)::int AS unique_senders
     FROM submissions ${whereSql}`;
 
   const byTypeSql = `SELECT type, COUNT(*)::int AS count,
-      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS attendees
+      COALESCE(SUM(attendees), 0)::int AS attendees
     FROM submissions ${whereSql}
     GROUP BY type ORDER BY count DESC`;
 
   const byAreaSql = `SELECT COALESCE(area, '(none)') AS area, COUNT(*)::int AS count,
-      COALESCE(SUM(NULLIF(regexp_replace(attendees, '[^0-9]', '', 'g'), '')::int), 0)::int AS attendees
+      COALESCE(SUM(attendees), 0)::int AS attendees
     FROM submissions ${whereSql}
     GROUP BY COALESCE(area, '(none)') ORDER BY count DESC`;
 
