@@ -11,6 +11,8 @@ const logger = require('../utils/logger');
 const STATE = {
   IDLE: 'IDLE',
   AWAITING_TYPE: 'AWAITING_TYPE',
+  AWAITING_AREA: 'AWAITING_AREA',
+  AWAITING_AREA_OTHER: 'AWAITING_AREA_OTHER',
   AWAITING_DETAILS: 'AWAITING_DETAILS',
   AWAITING_LOCATION: 'AWAITING_LOCATION',
   AWAITING_ATTENDEES: 'AWAITING_ATTENDEES',
@@ -23,6 +25,12 @@ const PAYLOAD = {
   HELP: 'HELP',
   TYPE_HOME_CHURCH: 'TYPE_HOME_CHURCH',
   TYPE_CELL_GROUP: 'TYPE_CELL_GROUP',
+  AREA_1: 'AREA_1',
+  AREA_2: 'AREA_2',
+  AREA_3: 'AREA_3',
+  AREA_4: 'AREA_4',
+  AREA_5: 'AREA_5',
+  AREA_OTHER: 'AREA_OTHER',
   SKIP_IMAGE: 'SKIP_IMAGE',
   CANCEL: 'CANCEL',
 };
@@ -35,6 +43,16 @@ const MAIN_MENU_QUICK_REPLIES = [
 const TYPE_QUICK_REPLIES = [
   { content_type: 'text', title: 'Home Church', payload: PAYLOAD.TYPE_HOME_CHURCH },
   { content_type: 'text', title: 'Cell Group', payload: PAYLOAD.TYPE_CELL_GROUP },
+  { content_type: 'text', title: 'Cancel', payload: PAYLOAD.CANCEL },
+];
+
+const AREA_QUICK_REPLIES = [
+  { content_type: 'text', title: 'Area 1', payload: PAYLOAD.AREA_1 },
+  { content_type: 'text', title: 'Area 2', payload: PAYLOAD.AREA_2 },
+  { content_type: 'text', title: 'Area 3', payload: PAYLOAD.AREA_3 },
+  { content_type: 'text', title: 'Area 4', payload: PAYLOAD.AREA_4 },
+  { content_type: 'text', title: 'Area 5', payload: PAYLOAD.AREA_5 },
+  { content_type: 'text', title: 'Other', payload: PAYLOAD.AREA_OTHER },
   { content_type: 'text', title: 'Cancel', payload: PAYLOAD.CANCEL },
 ];
 
@@ -76,13 +94,14 @@ async function clearConversation(pageId, senderPsid) {
 
 async function insertSubmission(pageId, senderPsid, draft) {
   const r = await query(
-    `INSERT INTO submissions (page_id, sender_psid, type, details, location, attendees, image_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO submissions (page_id, sender_psid, type, area, details, location, attendees, image_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, created_at`,
     [
       pageId,
       senderPsid,
       draft.type || null,
+      draft.area || null,
       draft.details || null,
       draft.location || null,
       Number.isFinite(draft.attendees) ? draft.attendees : null,
@@ -200,6 +219,51 @@ async function handleEvent(pageId, senderPsid, ev) {
           return true;
         }
         draft.type = chosen;
+        await saveConversation(pageId, senderPsid, STATE.AWAITING_AREA, draft);
+        await send('Which Area is this for?', { quickReplies: AREA_QUICK_REPLIES });
+        return true;
+      }
+
+      case STATE.AWAITING_AREA: {
+        let chosen = null;
+        let goOther = false;
+        if (intent.kind === 'quick_reply') {
+          const map = {
+            [PAYLOAD.AREA_1]: 'Area 1',
+            [PAYLOAD.AREA_2]: 'Area 2',
+            [PAYLOAD.AREA_3]: 'Area 3',
+            [PAYLOAD.AREA_4]: 'Area 4',
+            [PAYLOAD.AREA_5]: 'Area 5',
+          };
+          if (map[intent.payload]) chosen = map[intent.payload];
+          else if (intent.payload === PAYLOAD.AREA_OTHER) goOther = true;
+        } else if (intent.kind === 'text') {
+          const t = intent.text.trim().toLowerCase();
+          const m = t.match(/^(?:area\s*)?([1-5])$/);
+          if (m) chosen = `Area ${m[1]}`;
+          else if (t === 'other') goOther = true;
+        }
+        if (goOther) {
+          await saveConversation(pageId, senderPsid, STATE.AWAITING_AREA_OTHER, draft);
+          await send('Please type the area name.');
+          return true;
+        }
+        if (!chosen) {
+          await send('Please tap one of the options below.', { quickReplies: AREA_QUICK_REPLIES });
+          return true;
+        }
+        draft.area = chosen;
+        await saveConversation(pageId, senderPsid, STATE.AWAITING_DETAILS, draft);
+        await send('Please type the details (topic / agenda / notes).');
+        return true;
+      }
+
+      case STATE.AWAITING_AREA_OTHER: {
+        if (intent.kind !== 'text') {
+          await send('Please type the area name as a text message.');
+          return true;
+        }
+        draft.area = intent.text.trim().slice(0, 100);
         await saveConversation(pageId, senderPsid, STATE.AWAITING_DETAILS, draft);
         await send('Please type the details (topic / agenda / notes).');
         return true;
@@ -260,8 +324,7 @@ async function handleEvent(pageId, senderPsid, ev) {
         await clearConversation(pageId, senderPsid);
         const summary =
           'Saved \u2705\n' +
-          `Type: ${draft.type}\n` +
-          `Details: ${draft.details}\n` +
+          `Type: ${draft.type}\n` +          `Area: ${draft.area || '—'}\n` +          `Details: ${draft.details}\n` +
           `Location: ${draft.location}\n` +
           `Attendees: ${draft.attendees}\n` +
           `Image: ${draft.image_url ? 'Yes' : 'No'}\n` +
@@ -287,7 +350,7 @@ async function handleEvent(pageId, senderPsid, ev) {
 
 // ---------- Submissions query (admin) -----------------------------------------
 
-async function listSubmissions({ page_id, sender_psid, type, limit = 50, offset = 0 } = {}) {
+async function listSubmissions({ page_id, sender_psid, type, area, limit = 50, offset = 0 } = {}) {
   const where = [];
   const params = [];
   const add = (col, val) => {
@@ -297,6 +360,7 @@ async function listSubmissions({ page_id, sender_psid, type, limit = 50, offset 
   if (page_id) add('page_id', page_id);
   if (sender_psid) add('sender_psid', sender_psid);
   if (type) add('type', type);
+  if (area) add('area', area);
 
   const lim = Math.min(parseInt(limit, 10) || 50, 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);

@@ -191,6 +191,7 @@ router.get('/admin/submissions', async (req, res, next) => {
         (s) => `<tr>
           <td>#${s.id}</td>
           <td>${escapeHtml(s.type)}</td>
+          <td>${escapeHtml(s.area || '—')}</td>
           <td>${escapeHtml(s.details)}</td>
           <td>${escapeHtml(s.location)}</td>
           <td>${escapeHtml(s.attendees)}</td>
@@ -219,7 +220,7 @@ router.get('/admin/submissions', async (req, res, next) => {
           ? '<div class="empty">No submissions yet.</div>'
           : `<table>
               <thead><tr>
-                <th>ID</th><th>Type</th><th>Details</th><th>Location</th><th>Attendees</th><th>Image</th><th>Page / Sender</th><th>Created</th>
+                <th>ID</th><th>Type</th><th>Area</th><th>Details</th><th>Location</th><th>Attendees</th><th>Image</th><th>Page / Sender</th><th>Created</th>
               </tr></thead>
               <tbody>${rows}</tbody>
             </table>`

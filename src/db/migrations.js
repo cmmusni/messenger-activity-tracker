@@ -55,12 +55,15 @@ const SQL = `
     page_id      TEXT,
     sender_psid  TEXT,
     type         TEXT,
+    area         TEXT,
     details      TEXT,
     location     TEXT,
     attendees    INTEGER,
     image_url    TEXT,
     created_at   TIMESTAMPTZ DEFAULT now()
   );
+
+  ALTER TABLE submissions ADD COLUMN IF NOT EXISTS area TEXT;
 
   CREATE INDEX IF NOT EXISTS idx_submissions_page_id    ON submissions(page_id);
   CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at);

@@ -10,8 +10,8 @@ router.use('/submissions', adminAuth);
 
 router.get('/submissions', async (req, res, next) => {
   try {
-    const { page_id, sender_psid, type, limit, offset } = req.query;
-    res.json(await listSubmissions({ page_id, sender_psid, type, limit, offset }));
+    const { page_id, sender_psid, type, area, limit, offset } = req.query;
+    res.json(await listSubmissions({ page_id, sender_psid, type, area, limit, offset }));
   } catch (err) {
     next(err);
   }
