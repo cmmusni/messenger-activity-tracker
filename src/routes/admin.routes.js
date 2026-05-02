@@ -16,8 +16,6 @@ const {
 const router = express.Router();
 router.use(express.urlencoded({ extended: false }));
 
-// ---------- HTML helpers ------------------------------------------------------
-
 function escapeHtml(v) {
   if (v === null || v === undefined) return '';
   return String(v)
@@ -28,76 +26,235 @@ function escapeHtml(v) {
     .replace(/'/g, '&#39;');
 }
 
+const STYLES = `
+:root {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 6% 10%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 6% 10%;
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 0 0% 98%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 240 4% 16%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 0 0% 98%;
+  --success: 142 71% 45%;
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 240 5% 65%;
+  --radius: 0.5rem;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+.topbar {
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar-inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; height: 56px; gap: 24px;
+}
+.brand { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.brand .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--success)); margin-right: 8px; vertical-align: middle; }
+.nav-links { display: flex; gap: 4px; flex: 1; }
+.nav-links a {
+  padding: 6px 12px; border-radius: var(--radius); font-weight: 500; font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  transition: color 0.15s, background 0.15s;
+}
+.nav-links a:hover, .nav-links a.active { color: hsl(var(--foreground)); background: hsl(var(--accent)); }
+.user-menu { display: flex; align-items: center; gap: 12px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+main.container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; flex: 1; width: 100%; }
+
+h1.page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 4px; }
+.page-subtitle { color: hsl(var(--muted-foreground)); font-size: 14px; margin: 0; }
+h2.section-title { font-size: 18px; font-weight: 600; margin: 32px 0 12px; letter-spacing: -0.01em; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+
+.card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-header { padding: 20px 24px 12px; }
+.card-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+.card-description { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 0; }
+.card-content { padding: 16px 24px 20px; }
+.card-footer { padding: 12px 24px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid hsl(var(--border)); background: hsl(var(--background) / 0.4); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 36px; padding: 0 16px; border-radius: var(--radius);
+  font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap; text-decoration: none; font-family: inherit;
+}
+.btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-outline { background: transparent; color: hsl(var(--foreground)); border-color: hsl(var(--border)); }
+.btn-outline:hover { background: hsl(var(--accent)); }
+.btn-destructive { background: hsl(var(--destructive)); color: hsl(var(--destructive-foreground)); }
+.btn-destructive:hover { opacity: 0.9; }
+.btn-ghost { background: transparent; color: hsl(var(--muted-foreground)); }
+.btn-ghost:hover { color: hsl(var(--foreground)); background: hsl(var(--accent)); }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.btn:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+.form-row { margin-bottom: 16px; }
+.label { display: block; font-size: 13px; font-weight: 500; color: hsl(var(--foreground)); margin-bottom: 6px; }
+.input, .select, .textarea {
+  display: block; width: 100%; height: 36px; padding: 0 12px;
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--input)); border-radius: var(--radius);
+  font-size: 14px; font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none; border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+}
+.textarea { height: auto; min-height: 96px; padding: 10px 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; resize: vertical; }
+.select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+
+.filters {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+  padding: 12px; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+}
+.filters .select, .filters .input { width: auto; min-width: 160px; height: 32px; }
+
+.table-wrap { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); overflow: hidden; }
+table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.table th {
+  background: hsl(var(--card)); padding: 10px 16px; text-align: left;
+  font-weight: 500; font-size: 12px; color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border)); white-space: nowrap;
+}
+table.table td {
+  padding: 12px 16px; border-bottom: 1px solid hsl(var(--border));
+  vertical-align: top; color: hsl(var(--foreground));
+}
+table.table tr:last-child td { border-bottom: none; }
+table.table tr:hover td { background: hsl(var(--accent) / 0.4); }
+.cell-mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: hsl(var(--muted-foreground)); white-space: nowrap; }
+.cell-id { color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.muted { color: hsl(var(--muted-foreground)); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; height: 20px; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  border: 1px solid hsl(var(--border));
+  background: transparent; color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.badge-secondary { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); border-color: transparent; }
+.badge-mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 10px; }
+
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: hsl(var(--secondary)); color: hsl(var(--muted-foreground));
+  font-size: 12px; font-weight: 600; overflow: hidden; flex-shrink: 0;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sender-cell { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+.sender-name { font-weight: 500; color: hsl(var(--foreground)); }
+.sender-psid { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 10px; color: hsl(var(--muted-foreground)); }
+
+.thumb { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; border: 1px solid hsl(var(--border)); display: block; }
+
+.alert {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: var(--radius);
+  border: 1px solid hsl(var(--border)); background: hsl(var(--card));
+  margin-bottom: 16px; font-size: 14px;
+}
+.alert-icon { flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px; }
+.alert-error { border-color: hsl(var(--destructive) / 0.5); background: hsl(var(--destructive) / 0.1); color: hsl(0 0% 95%); }
+.alert-success { border-color: hsl(var(--success) / 0.4); background: hsl(var(--success) / 0.1); color: hsl(var(--success)); }
+
+.empty {
+  text-align: center; padding: 48px 24px; color: hsl(var(--muted-foreground));
+  background: hsl(var(--card)); border: 1px dashed hsl(var(--border)); border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: hsl(var(--background)); }
+.auth-card { width: 100%; max-width: 380px; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 28px; }
+.auth-card h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.auth-card .auth-sub { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 0 0 24px; }
+
+.inline-form { display: inline; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+`;
+
 function layout(title, body, opts = {}) {
-  const nav = opts.hideNav
+  const user = opts.user || '';
+  const initials = user
+    ? user.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+    : '';
+  const active = opts.active || '';
+  const navLinks = `
+    <a href="/admin/submissions" class="${active === 'submissions' ? 'active' : ''}">Submissions</a>
+    <a href="/admin/pages" class="${active === 'pages' ? 'active' : ''}">Pages</a>
+  `;
+  const topbar = opts.hideNav
     ? ''
-    : `<nav>
-         <a href="/admin/submissions">Submissions</a>
-         <a href="/admin/pages">Pages</a>
-         <span class="spacer"></span>
-         <span class="user">${escapeHtml(opts.user || '')}</span>
-         <a href="/admin/logout" class="logout">Logout</a>
-       </nav>`;
+    : `<header class="topbar">
+         <div class="topbar-inner">
+           <div class="brand"><span class="dot"></span>Activity Tracker</div>
+           <nav class="nav-links">${navLinks}</nav>
+           <div class="user-menu">
+             <div class="avatar" title="${escapeHtml(user)}">${escapeHtml(initials || '?')}</div>
+             <a href="/admin/logout" class="btn btn-ghost btn-sm">Sign out</a>
+           </div>
+         </div>
+       </header>`;
+  const main = opts.hideNav ? body : `<main class="container">${body}</main>`;
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
   <title>${escapeHtml(title)} \u00b7 Admin</title>
-  <style>
-    :root { --bg:#0f172a; --panel:#1e293b; --border:#334155; --text:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --danger:#f87171; --ok:#34d399; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
-    nav { display: flex; gap: 16px; padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--border); align-items: center; }
-    nav a { color: var(--text); text-decoration: none; font-weight: 500; }
-    nav a:hover { color: var(--accent); }
-    nav .spacer { flex: 1; }
-    nav .user { color: var(--muted); font-size: 14px; }
-    nav .logout { color: var(--danger); }
-    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
-    h1 { margin: 0 0 16px; }
-    h2 { margin-top: 32px; }
-    table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 8px; overflow: hidden; }
-    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: top; }
-    th { background: #0b1220; color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
-    tr:last-child td { border-bottom: none; }
-    .empty { color: var(--muted); padding: 24px; text-align: center; background: var(--panel); border-radius: 8px; }
-    form.card { background: var(--panel); padding: 20px; border-radius: 8px; max-width: 480px; margin: 60px auto; }
-    form.inline { display: inline; }
-    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
-    input[type=text], input[type=password], textarea {
-      width: 100%; padding: 8px 10px; background: #0b1220; color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
-    }
-    textarea { font-family: ui-monospace, monospace; min-height: 90px; }
-    button {
-      margin-top: 16px; padding: 10px 18px; background: var(--accent); color: #0b1220; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;
-    }
-    button.danger { background: var(--danger); color: #fff; }
-    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    .error { background: #7f1d1d; color: #fee2e2; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
-    .ok { background: #064e3b; color: #d1fae5; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #0b1220; color: var(--muted); }
-    img.thumb { max-width: 64px; max-height: 64px; border-radius: 4px; }
-    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-    .sender { display: flex; gap: 8px; align-items: center; }
-    .sender-name { font-weight: 500; margin-bottom: 2px; }
-    .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-    .filters input, .filters select { padding: 6px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
-    a.btn { color: var(--accent); text-decoration: none; font-size: 13px; }
-    a.btn:hover { text-decoration: underline; }
-    code { background: #0b1220; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-  </style>
+  <style>${STYLES}</style>
 </head>
 <body>
-  ${nav}
-  <main>${body}</main>
+  <div class="app">
+    ${topbar}
+    ${main}
+  </div>
 </body>
 </html>`;
 }
 
 function flashFromQuery(q) {
-  if (q.err) return `<div class="error">${escapeHtml(q.err)}</div>`;
-  if (q.ok) return `<div class="ok">${escapeHtml(q.ok)}</div>`;
+  if (q.err) {
+    return `<div class="alert alert-error">
+      <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>${escapeHtml(q.err)}</div>
+    </div>`;
+  }
+  if (q.ok) {
+    return `<div class="alert alert-success">
+      <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      <div>${escapeHtml(q.ok)}</div>
+    </div>`;
+  }
   return '';
 }
 
@@ -105,19 +262,31 @@ function flashFromQuery(q) {
 
 router.get('/admin/login', (req, res) => {
   if (readSession(req)) return res.redirect('/admin/submissions');
-  const err = req.query.err ? `<div class="error">${escapeHtml(req.query.err)}</div>` : '';
+  const errAlert = req.query.err
+    ? `<div class="alert alert-error">
+         <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+         <div>${escapeHtml(req.query.err)}</div>
+       </div>`
+    : '';
   res.send(
     layout(
-      'Login',
-      `<form class="card" method="post" action="/admin/login">
-         <h1>Admin Login</h1>
-         ${err}
-         <label>Username</label>
-         <input type="text" name="username" autocomplete="username" autofocus required />
-         <label>Password</label>
-         <input type="password" name="password" autocomplete="current-password" required />
-         <button type="submit">Sign in</button>
-       </form>`,
+      'Sign in',
+      `<div class="auth-shell">
+         <form class="auth-card" method="post" action="/admin/login">
+           <h1>Sign in</h1>
+           <p class="auth-sub">Enter your credentials to access the admin dashboard.</p>
+           ${errAlert}
+           <div class="form-row">
+             <label class="label" for="username">Username</label>
+             <input class="input" id="username" type="text" name="username" autocomplete="username" autofocus required />
+           </div>
+           <div class="form-row">
+             <label class="label" for="password">Password</label>
+             <input class="input" id="password" type="password" name="password" autocomplete="current-password" required />
+           </div>
+           <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Sign in</button>
+         </form>
+       </div>`,
       { hideNav: true }
     )
   );
@@ -156,11 +325,7 @@ router.get('/admin/logout', (req, res) => {
 // ---------- Authenticated routes ---------------------------------------------
 
 router.use('/admin', (req, res, next) => {
-  // Skip already-public sub-paths.
-  if (
-    req.path === '/login' ||
-    req.path === '/logout'
-  ) return next();
+  if (req.path === '/login' || req.path === '/logout') return next();
   return requireAdminSession(req, res, next);
 });
 
@@ -172,10 +337,10 @@ router.get('/admin/submissions', async (req, res, next) => {
     const data = await listSubmissions({ page_id, type, limit: 200 });
     const pagesList = await listPages();
 
-    // Resolve sender display names (cached, with weekly refresh).
     const senderMap = await getSenderProfiles(
       data.items.map((s) => ({ pageId: s.page_id, psid: s.sender_psid }))
     );
+
     const pageOptions = ['<option value="">All pages</option>']
       .concat(
         pagesList.map(
@@ -198,53 +363,62 @@ router.get('/admin/submissions', async (req, res, next) => {
     const rows = data.items
       .map((s) => {
         const prof = senderMap.get(`${s.page_id}:${s.sender_psid}`) || {};
-        const name = prof.name || '(unknown)';
+        const name = prof.name || 'Unknown';
+        const initials = (prof.name || '?').split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
         const avatar = prof.profile_pic
-          ? `<img class="avatar" src="${escapeHtml(prof.profile_pic)}" alt=""/>`
-          : '';
+          ? `<div class="avatar"><img src="${escapeHtml(prof.profile_pic)}" alt=""/></div>`
+          : `<div class="avatar">${escapeHtml(initials)}</div>`;
         return `<tr>
-          <td>#${s.id}</td>
-          <td>${escapeHtml(s.type)}</td>
-          <td>${escapeHtml(s.area || '—')}</td>
+          <td class="cell-id">#${s.id}</td>
+          <td><span class="badge badge-secondary">${escapeHtml(s.type)}</span></td>
+          <td>${s.area ? `<span class="badge">${escapeHtml(s.area)}</span>` : '<span class="muted">—</span>'}</td>
           <td>${escapeHtml(s.details)}</td>
           <td>${escapeHtml(s.location)}</td>
-          <td>${escapeHtml(s.attendees)}</td>
+          <td style="font-variant-numeric: tabular-nums;">${escapeHtml(s.attendees)}</td>
           <td>${
             s.image_url
               ? `<a href="${escapeHtml(s.image_url)}" target="_blank"><img class="thumb" src="${escapeHtml(s.image_url)}" alt="img"/></a>`
-              : '<span class="pill">none</span>'
+              : '<span class="muted" style="font-size:12px;">—</span>'
           }</td>
           <td>
-            <div class="sender">${avatar}<div>
-              <div class="sender-name">${escapeHtml(name)}</div>
-              <span class="pill" title="PSID">${escapeHtml(s.sender_psid)}</span>
-            </div></div>
+            <div class="sender-cell">
+              ${avatar}
+              <div>
+                <div class="sender-name">${escapeHtml(name)}</div>
+                <div class="sender-psid">${escapeHtml(s.sender_psid)}</div>
+              </div>
+            </div>
           </td>
-          <td>${escapeHtml(new Date(s.created_at).toLocaleString())}</td>
+          <td class="cell-mono">${escapeHtml(new Date(s.created_at).toLocaleString())}</td>
         </tr>`;
       })
       .join('');
 
     const body = `
-      <h1>Submissions <span class="pill">${data.total}</span></h1>
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Submissions</h1>
+          <p class="page-subtitle">${data.total} total ${data.total === 1 ? 'record' : 'records'}</p>
+        </div>
+      </div>
       ${flashFromQuery(req.query)}
       <form class="filters" method="get">
-        <select name="page_id">${pageOptions}</select>
-        <select name="type">${typeOptions}</select>
-        <button type="submit" class="secondary">Filter</button>
-        <a class="btn" href="/admin/submissions">Reset</a>
+        <select class="select" name="page_id">${pageOptions}</select>
+        <select class="select" name="type">${typeOptions}</select>
+        <button type="submit" class="btn btn-outline btn-sm">Apply filters</button>
+        <a href="/admin/submissions" class="btn btn-ghost btn-sm">Reset</a>
       </form>
       ${
         data.items.length === 0
-          ? '<div class="empty">No submissions yet.</div>'
-          : `<table>
+          ? '<div class="empty">No submissions yet. Records will appear here when users complete the Record Activity flow.</div>'
+          : `<div class="table-wrap"><table class="table">
               <thead><tr>
-                <th>ID</th><th>Type</th><th>Area</th><th>Details</th><th>Location</th><th>Attendees</th><th>Image</th><th>Sender</th><th>Created</th>
+                <th>ID</th><th>Type</th><th>Area</th><th>Details</th><th>Location</th><th>Attendees</th><th>Photo</th><th>Sender</th><th>Created</th>
               </tr></thead>
               <tbody>${rows}</tbody>
-            </table>`
+            </table></div>`
       }`;
-    res.send(layout('Submissions', body, { user: req.adminSession.username }));
+    res.send(layout('Submissions', body, { user: req.adminSession.username, active: 'submissions' }));
   } catch (err) {
     next(err);
   }
@@ -253,47 +427,70 @@ router.get('/admin/submissions', async (req, res, next) => {
 router.get('/admin/pages', async (req, res, next) => {
   try {
     const pages = await listPages();
-    const rows = pages.length
-      ? pages
-          .map(
-            (p) => `<tr>
-              <td><span class="pill">${escapeHtml(p.page_id)}</span></td>
-              <td>${escapeHtml(p.page_name)}</td>
-              <td>${escapeHtml(new Date(p.updated_at).toLocaleString())}</td>
-              <td>
-                <form class="inline" method="post" action="/admin/pages/${escapeHtml(p.page_id)}/profile">
-                  <button type="submit" class="secondary">Install Get Started</button>
-                </form>
-                <form class="inline" method="post" action="/admin/pages/${escapeHtml(p.page_id)}/delete" onsubmit="return confirm('Delete this page?');">
-                  <button type="submit" class="danger">Delete</button>
-                </form>
-              </td>
-            </tr>`
-          )
-          .join('')
-      : '';
+    const rows = pages
+      .map(
+        (p) => `<tr>
+          <td><span class="badge badge-mono">${escapeHtml(p.page_id)}</span></td>
+          <td><strong>${escapeHtml(p.page_name || '—')}</strong></td>
+          <td class="cell-mono">${escapeHtml(new Date(p.updated_at).toLocaleString())}</td>
+          <td>
+            <div class="row-actions">
+              <form class="inline-form" method="post" action="/admin/pages/${escapeHtml(p.page_id)}/profile">
+                <button type="submit" class="btn btn-outline btn-sm">Install Get Started</button>
+              </form>
+              <form class="inline-form" method="post" action="/admin/pages/${escapeHtml(p.page_id)}/delete" onsubmit="return confirm('Delete this page? This cannot be undone.');">
+                <button type="submit" class="btn btn-destructive btn-sm">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>`
+      )
+      .join('');
+
     const body = `
-      <h1>Pages</h1>
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Pages</h1>
+          <p class="page-subtitle">Facebook Pages connected to this tracker.</p>
+        </div>
+      </div>
       ${flashFromQuery(req.query)}
       ${
         pages.length
-          ? `<table>
-              <thead><tr><th>Page ID</th><th>Name</th><th>Updated</th><th>Actions</th></tr></thead>
+          ? `<div class="table-wrap"><table class="table">
+              <thead><tr><th>Page ID</th><th>Name</th><th>Updated</th><th style="text-align:right">Actions</th></tr></thead>
               <tbody>${rows}</tbody>
-            </table>`
-          : '<div class="empty">No pages registered.</div>'
+            </table></div>`
+          : '<div class="empty">No pages registered yet. Add one below to start receiving messages.</div>'
       }
-      <h2>Add / update a page</h2>
-      <form class="card" method="post" action="/admin/pages" style="margin: 16px 0; max-width: 600px;">
-        <label>Page ID</label>
-        <input type="text" name="page_id" required />
-        <label>Page name</label>
-        <input type="text" name="page_name" />
-        <label>Page access token</label>
-        <textarea name="page_access_token" required placeholder="EAA..."></textarea>
-        <button type="submit">Save</button>
-      </form>`;
-    res.send(layout('Pages', body, { user: req.adminSession.username }));
+
+      <h2 class="section-title">Add or update a page</h2>
+      <div class="card" style="max-width: 640px;">
+        <div class="card-header">
+          <h3 class="card-title">Register page access token</h3>
+          <p class="card-description">The token is stored in the database and used to send replies and look up sender names.</p>
+        </div>
+        <form method="post" action="/admin/pages">
+          <div class="card-content">
+            <div class="form-row">
+              <label class="label" for="page_id">Page ID</label>
+              <input class="input" id="page_id" type="text" name="page_id" required placeholder="1044820368721242" />
+            </div>
+            <div class="form-row">
+              <label class="label" for="page_name">Page name</label>
+              <input class="input" id="page_name" type="text" name="page_name" placeholder="My Church Page" />
+            </div>
+            <div class="form-row">
+              <label class="label" for="page_access_token">Page access token</label>
+              <textarea class="textarea" id="page_access_token" name="page_access_token" required placeholder="EAA..."></textarea>
+            </div>
+          </div>
+          <div class="card-footer">
+            <button type="submit" class="btn btn-primary">Save page</button>
+          </div>
+        </form>
+      </div>`;
+    res.send(layout('Pages', body, { user: req.adminSession.username, active: 'pages' }));
   } catch (err) {
     next(err);
   }
