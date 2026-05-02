@@ -3,6 +3,7 @@
 const { query } = require('../db/database');
 const { classify } = require('./classifier.service');
 const { sendTextMessage } = require('./messenger.service');
+const { getAccessToken } = require('./pages.service');
 const config = require('../config');
 const logger = require('../utils/logger');
 const { nowIso } = require('../utils/dates');
@@ -109,7 +110,9 @@ async function processMessagingEvent(pageId, ev) {
 
   if (inserted && config.enableAutoReply && eventType === 'message' && senderPsid) {
     try {
-      await sendTextMessage(senderPsid, `Logged ✅ Category: ${parsed.category}`);
+      // Per-page token from DB takes precedence; fall back to env PAGE_ACCESS_TOKEN.
+      const accessToken = (await getAccessToken(pageId)) || config.pageAccessToken || null;
+      await sendTextMessage(senderPsid, `Logged ✅ Category: ${parsed.category}`, { accessToken });
     } catch (err) {
       logger.error('Auto-reply failed:', err.message);
     }
@@ -123,6 +126,7 @@ async function listActivities({
   sender_psid,
   team,
   project,
+  page_id,
   limit = 50,
   offset = 0,
 } = {}) {
@@ -139,6 +143,7 @@ async function listActivities({
   if (sender_psid) add('sender_psid', '=', sender_psid);
   if (team) add('team', '=', team);
   if (project) add('project', '=', project);
+  if (page_id) add('page_id', '=', page_id);
 
   const lim = Math.min(parseInt(limit, 10) || 50, 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);

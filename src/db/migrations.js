@@ -33,11 +33,20 @@ const SQL = `
     received_at  TIMESTAMPTZ
   );
 
+  CREATE TABLE IF NOT EXISTS pages (
+    page_id      TEXT PRIMARY KEY,
+    page_name    TEXT,
+    access_token TEXT NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    updated_at   TIMESTAMPTZ DEFAULT now()
+  );
+
   CREATE INDEX IF NOT EXISTS idx_activities_created_at  ON activities(created_at);
   CREATE INDEX IF NOT EXISTS idx_activities_category    ON activities(category);
   CREATE INDEX IF NOT EXISTS idx_activities_sender_psid ON activities(sender_psid);
   CREATE INDEX IF NOT EXISTS idx_activities_team        ON activities(team);
   CREATE INDEX IF NOT EXISTS idx_activities_project     ON activities(project);
+  CREATE INDEX IF NOT EXISTS idx_activities_page_id     ON activities(page_id);
   CREATE INDEX IF NOT EXISTS idx_message_events_received_at ON message_events(received_at);
 `;
 

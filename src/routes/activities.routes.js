@@ -7,8 +7,18 @@ const router = express.Router();
 
 router.get('/activities', async (req, res, next) => {
   try {
-    const { from, to, category, sender_psid, team, project, limit, offset } = req.query;
-    const data = await listActivities({ from, to, category, sender_psid, team, project, limit, offset });
+    const { from, to, category, sender_psid, team, project, page_id, limit, offset } = req.query;
+    const data = await listActivities({
+      from,
+      to,
+      category,
+      sender_psid,
+      team,
+      project,
+      page_id,
+      limit,
+      offset,
+    });
     res.json(data);
   } catch (err) {
     next(err);

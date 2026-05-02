@@ -15,6 +15,7 @@ const webhookRoutes = require('./routes/webhook.routes');
 const activitiesRoutes = require('./routes/activities.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const messagesRoutes = require('./routes/messages.routes');
+const pagesRoutes = require('./routes/pages.routes');
 const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -65,6 +66,7 @@ app.use(webhookRoutes);
 app.use(activitiesRoutes);
 app.use(reportsRoutes);
 app.use(messagesRoutes);
+app.use(pagesRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not Found' }));
 app.use(errorHandler);
