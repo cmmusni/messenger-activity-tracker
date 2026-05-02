@@ -28,20 +28,21 @@ function escapeHtml(v) {
 
 const STYLES = `
 :root {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
-  --card: 240 6% 10%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 6% 10%;
-  --secondary: 240 4% 16%;
-  --secondary-foreground: 0 0% 98%;
-  --muted-foreground: 240 5% 65%;
-  --accent: 240 4% 16%;
-  --destructive: 0 63% 31%;
+  --background: 0 0% 100%;
+  --foreground: 240 10% 12%;
+  --card: 0 0% 100%;
+  --card-muted: 240 10% 98%;
+  --primary: 240 6% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 5% 96%;
+  --secondary-foreground: 240 6% 10%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 240 5% 96%;
+  --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
-  --success: 142 71% 45%;
-  --border: 240 4% 16%;
-  --input: 240 4% 16%;
+  --success: 142 71% 38%;
+  --border: 240 6% 90%;
+  --input: 240 6% 90%;
   --ring: 240 5% 65%;
   --radius: 0.5rem;
 }
@@ -49,7 +50,7 @@ const STYLES = `
 html, body { margin: 0; padding: 0; }
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: hsl(var(--background));
+  background: hsl(var(--card-muted));
   color: hsl(var(--foreground));
   font-size: 14px;
   line-height: 1.5;
@@ -93,7 +94,7 @@ h2.section-title { font-size: 18px; font-weight: 600; margin: 32px 0 12px; lette
 .card-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
 .card-description { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 0; }
 .card-content { padding: 16px 24px 20px; }
-.card-footer { padding: 12px 24px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid hsl(var(--border)); background: hsl(var(--background) / 0.4); }
+.card-footer { padding: 12px 24px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid hsl(var(--border)); background: hsl(var(--card-muted)); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -127,7 +128,7 @@ h2.section-title { font-size: 18px; font-weight: 600; margin: 32px 0 12px; lette
   box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
 }
 .textarea { height: auto; min-height: 96px; padding: 10px 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; resize: vertical; }
-.select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+.select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
 
 .filters {
   display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
@@ -183,8 +184,8 @@ table.table tr:hover td { background: hsl(var(--accent) / 0.4); }
   margin-bottom: 16px; font-size: 14px;
 }
 .alert-icon { flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px; }
-.alert-error { border-color: hsl(var(--destructive) / 0.5); background: hsl(var(--destructive) / 0.1); color: hsl(0 0% 95%); }
-.alert-success { border-color: hsl(var(--success) / 0.4); background: hsl(var(--success) / 0.1); color: hsl(var(--success)); }
+.alert-error { border-color: hsl(var(--destructive) / 0.4); background: hsl(0 86% 97%); color: hsl(0 72% 35%); }
+.alert-success { border-color: hsl(var(--success) / 0.4); background: hsl(142 71% 96%); color: hsl(142 71% 26%); }
 
 .empty {
   text-align: center; padding: 48px 24px; color: hsl(var(--muted-foreground));
@@ -198,7 +199,7 @@ table.table tr:hover td { background: hsl(var(--accent) / 0.4); }
 .auth-card .auth-sub { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 0 0 24px; }
 
 .inline-form { display: inline; }
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .stat-card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 20px; }
@@ -206,8 +207,39 @@ table.table tr:hover td { background: hsl(var(--accent) / 0.4); }
 .stat-value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 0; font-variant-numeric: tabular-nums; }
 .stat-sub { color: hsl(var(--muted-foreground)); font-size: 12px; margin: 4px 0 0; }
 .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
-@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr !important; } }
 .chart-box { position: relative; height: 280px; padding: 12px 4px 4px; }
+
+/* Mobile responsive */
+.mobile-toggle { display: none; background: transparent; border: 1px solid hsl(var(--border)); border-radius: var(--radius); padding: 6px 10px; cursor: pointer; color: hsl(var(--foreground)); }
+@media (max-width: 768px) {
+  main.container { padding: 20px 16px; }
+  .topbar-inner { padding: 0 16px; gap: 12px; height: 52px; }
+  .brand { font-size: 14px; }
+  .mobile-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .nav-links {
+    position: absolute; top: 52px; left: 0; right: 0;
+    flex-direction: column; gap: 0; background: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--border));
+    padding: 8px; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  }
+  .nav-links.open { display: flex; }
+  .nav-links a { padding: 10px 14px; border-radius: var(--radius); }
+  .user-menu .username-text { display: none; }
+  h1.page-title { font-size: 20px; }
+  .page-header { gap: 8px; margin-bottom: 16px; }
+  .stat-value { font-size: 24px; }
+  .stat-card { padding: 16px; }
+  .filters { padding: 10px; }
+  .filters .select, .filters .input { width: 100%; min-width: 0; }
+  .filters .btn { flex: 1; }
+  .card-header, .card-content, .card-footer { padding-left: 16px; padding-right: 16px; }
+  table.table th, table.table td { padding: 10px 12px; font-size: 12px; }
+  .thumb { width: 44px; height: 44px; }
+  .sender-cell { min-width: 0; }
+  .auth-card { padding: 20px; }
+}
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 `;
 
 function layout(title, body, opts = {}) {
@@ -227,9 +259,14 @@ function layout(title, body, opts = {}) {
     : `<header class="topbar">
          <div class="topbar-inner">
            <div class="brand"><span class="dot"></span>Activity Tracker</div>
-           <nav class="nav-links">${navLinks}</nav>
+           <button type="button" class="mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Menu">
+             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+             Menu
+           </button>
+           <nav id="navLinks" class="nav-links">${navLinks}</nav>
            <div class="user-menu">
              <div class="avatar" title="${escapeHtml(user)}">${escapeHtml(initials || '?')}</div>
+             <span class="username-text">${escapeHtml(user)}</span>
              <a href="/admin/logout" class="btn btn-ghost btn-sm">Sign out</a>
            </div>
          </div>
@@ -240,7 +277,7 @@ function layout(title, body, opts = {}) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="light" />
   <title>${escapeHtml(title)} \u00b7 Admin</title>
   <style>${STYLES}</style>
 </head>
@@ -588,14 +625,13 @@ router.get('/admin/reports', async (req, res, next) => {
       <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
       <script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
       <script src="https://cdn.amcharts.com/lib/5/percent.js"></script>
-      <script src="https://cdn.amcharts.com/lib/5/themes/Dark.js"></script>
       <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
       <script>
       (function() {
         var DATA = ${JSON.stringify(chartData)};
 
         function applyTheme(root) {
-          root.setThemes([am5themes_Dark.new(root), am5themes_Animated.new(root)]);
+          root.setThemes([am5themes_Animated.new(root)]);
           root._logo && root._logo.dispose();
         }
 
