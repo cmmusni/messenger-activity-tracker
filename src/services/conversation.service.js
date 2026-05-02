@@ -350,7 +350,7 @@ async function handleEvent(pageId, senderPsid, ev) {
 
 // ---------- Submissions query (admin) -----------------------------------------
 
-async function listSubmissions({ page_id, sender_psid, type, area, limit = 50, offset = 0 } = {}) {
+async function listSubmissions({ page_id, sender_psid, type, area, pageIds, limit = 50, offset = 0 } = {}) {
   const where = [];
   const params = [];
   const add = (col, val) => {
@@ -361,6 +361,14 @@ async function listSubmissions({ page_id, sender_psid, type, area, limit = 50, o
   if (sender_psid) add('sender_psid', sender_psid);
   if (type) add('type', type);
   if (area) add('area', area);
+  if (Array.isArray(pageIds)) {
+    if (pageIds.length === 0) {
+      where.push('FALSE');
+    } else {
+      params.push(pageIds);
+      where.push(`page_id = ANY($${params.length}::text[])`);
+    }
+  }
 
   const lim = Math.min(parseInt(limit, 10) || 50, 500);
   const off = Math.max(parseInt(offset, 10) || 0, 0);
@@ -397,12 +405,20 @@ const DEFAULT_PROFILE = {
   ],
 };
 
-async function getReportsData({ page_id, days = 30 } = {}) {
+async function getReportsData({ page_id, pageIds, days = 30 } = {}) {
   const where = [];
   const params = [];
   if (page_id) {
     params.push(page_id);
     where.push(`page_id = $${params.length}`);
+  }
+  if (Array.isArray(pageIds)) {
+    if (pageIds.length === 0) {
+      where.push('FALSE');
+    } else {
+      params.push(pageIds);
+      where.push(`page_id = ANY($${params.length}::text[])`);
+    }
   }
   const d = Math.min(Math.max(parseInt(days, 10) || 30, 1), 365);
   params.push(`${d} days`);

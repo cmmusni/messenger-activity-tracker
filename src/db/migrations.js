@@ -74,6 +74,15 @@ const SQL = `
     PRIMARY KEY (page_id, sender_psid)
   );
 
+  CREATE TABLE IF NOT EXISTS admin_users (
+    username       TEXT PRIMARY KEY,
+    password_hash  TEXT NOT NULL,
+    role           TEXT NOT NULL DEFAULT 'user',
+    allowed_pages  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at     TIMESTAMPTZ DEFAULT now(),
+    updated_at     TIMESTAMPTZ DEFAULT now()
+  );
+
   CREATE INDEX IF NOT EXISTS idx_submissions_page_id    ON submissions(page_id);
   CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at);
   CREATE INDEX IF NOT EXISTS idx_activities_created_at  ON activities(created_at);

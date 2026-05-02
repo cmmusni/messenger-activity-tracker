@@ -1,11 +1,11 @@
 'use strict';
 
 const express = require('express');
-const bcrypt = require('bcryptjs');
 const { listPages, upsertPage, deletePage, getAccessToken } = require('../services/pages.service');
 const { listSubmissions, getReportsData, DEFAULT_PROFILE } = require('../services/conversation.service');
 const { installMessengerProfile } = require('../services/messenger.service');
 const { getSenderProfiles } = require('../services/senders.service');
+const adminUsers = require('../services/adminUsers.service');
 const {
   issueSession,
   clearSession,
@@ -219,7 +219,8 @@ function layout(title, body, opts = {}) {
   const navLinks = `
     <a href="/admin/submissions" class="${active === 'submissions' ? 'active' : ''}">Submissions</a>
     <a href="/admin/reports" class="${active === 'reports' ? 'active' : ''}">Reports</a>
-    <a href="/admin/pages" class="${active === 'pages' ? 'active' : ''}">Pages</a>
+    ${opts.isSuperadmin ? `<a href="/admin/pages" class="${active === 'pages' ? 'active' : ''}">Pages</a>
+    <a href="/admin/users" class="${active === 'users' ? 'active' : ''}">Users</a>` : ''}
   `;
   const topbar = opts.hideNav
     ? ''
@@ -305,22 +306,14 @@ router.get('/admin/login', (req, res) => {
 router.post('/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
-    const expectedUser = process.env.ADMIN_USERNAME;
-    const expectedHash = process.env.ADMIN_PASSWORD_HASH;
-    if (!expectedUser || !expectedHash) {
-      return res.redirect(
-        '/admin/login?err=' + encodeURIComponent('Admin credentials not configured (set ADMIN_USERNAME and ADMIN_PASSWORD_HASH).')
-      );
-    }
-    if (
-      typeof username !== 'string' ||
-      typeof password !== 'string' ||
-      username !== expectedUser ||
-      !bcrypt.compareSync(password, expectedHash)
-    ) {
+    if (typeof username !== 'string' || typeof password !== 'string') {
       return res.redirect('/admin/login?err=' + encodeURIComponent('Invalid credentials'));
     }
-    issueSession(res, username);
+    const user = await adminUsers.authenticate(username, password);
+    if (!user) {
+      return res.redirect('/admin/login?err=' + encodeURIComponent('Invalid credentials'));
+    }
+    issueSession(res, user.username);
     res.redirect('/admin/submissions');
   } catch (err) {
     res.redirect('/admin/login?err=' + encodeURIComponent(err.message));
@@ -334,18 +327,46 @@ router.get('/admin/logout', (req, res) => {
 
 // ---------- Authenticated routes ---------------------------------------------
 
-router.use('/admin', (req, res, next) => {
+router.use('/admin', async (req, res, next) => {
   if (req.path === '/login' || req.path === '/logout') return next();
-  return requireAdminSession(req, res, next);
+  return requireAdminSession(req, res, async () => {
+    try {
+      const user = await adminUsers.findByUsername(req.adminSession.username);
+      if (!user) {
+        clearSession(res);
+        return res.redirect('/admin/login?err=' + encodeURIComponent('Account no longer exists'));
+      }
+      req.adminUser = user;
+      req.isSuperadmin = user.role === 'superadmin';
+      req.allowedPages = req.isSuperadmin ? null : (user.allowed_pages || []);
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
 });
+
+function requireSuperadmin(req, res, next) {
+  if (req.isSuperadmin) return next();
+  res.status(403).send(layout('Forbidden', '<div class="alert alert-error"><div>Forbidden — superadmin access required.</div></div>', { user: req.adminSession.username }));
+}
 
 router.get('/admin', (req, res) => res.redirect('/admin/submissions'));
 
 router.get('/admin/submissions', async (req, res, next) => {
   try {
     const { page_id, type } = req.query;
-    const data = await listSubmissions({ page_id, type, limit: 200 });
-    const pagesList = await listPages();
+    const allowed = req.allowedPages;
+    // If user has restricted access and requested page_id is outside allowed, ignore it
+    const effectivePageId = allowed && page_id && !allowed.includes(page_id) ? null : page_id;
+    const data = await listSubmissions({
+      page_id: effectivePageId,
+      type,
+      pageIds: allowed || undefined,
+      limit: 200,
+    });
+    const allPages = await listPages();
+    const pagesList = allowed ? allPages.filter((p) => allowed.includes(p.page_id)) : allPages;
 
     const senderMap = await getSenderProfiles(
       data.items.map((s) => ({ pageId: s.page_id, psid: s.sender_psid }))
@@ -428,7 +449,7 @@ router.get('/admin/submissions', async (req, res, next) => {
               <tbody>${rows}</tbody>
             </table></div>`
       }`;
-    res.send(layout('Submissions', body, { user: req.adminSession.username, active: 'submissions' }));
+    res.send(layout('Submissions', body, { user: req.adminSession.username, active: 'submissions', isSuperadmin: req.isSuperadmin }));
   } catch (err) {
     next(err);
   }
@@ -438,8 +459,11 @@ router.get('/admin/reports', async (req, res, next) => {
   try {
     const { page_id, days } = req.query;
     const d = parseInt(days, 10) || 30;
-    const data = await getReportsData({ page_id, days: d });
-    const pagesList = await listPages();
+    const allowed = req.allowedPages;
+    const effectivePageId = allowed && page_id && !allowed.includes(page_id) ? null : page_id;
+    const data = await getReportsData({ page_id: effectivePageId, pageIds: allowed || undefined, days: d });
+    const allPages = await listPages();
+    const pagesList = allowed ? allPages.filter((p) => allowed.includes(p.page_id)) : allPages;
 
     const senderMap = await getSenderProfiles(
       data.topSenders.map((s) => ({ pageId: s.page_id, psid: s.sender_psid }))
@@ -654,13 +678,13 @@ router.get('/admin/reports', async (req, res, next) => {
         });
       })();
       </script>`;
-    res.send(layout('Reports', body, { user: req.adminSession.username, active: 'reports' }));
+    res.send(layout('Reports', body, { user: req.adminSession.username, active: 'reports', isSuperadmin: req.isSuperadmin }));
   } catch (err) {
     next(err);
   }
 });
 
-router.get('/admin/pages', async (req, res, next) => {
+router.get('/admin/pages', requireSuperadmin, async (req, res, next) => {
   try {
     const pages = await listPages();
     const rows = pages
@@ -726,13 +750,13 @@ router.get('/admin/pages', async (req, res, next) => {
           </div>
         </form>
       </div>`;
-    res.send(layout('Pages', body, { user: req.adminSession.username, active: 'pages' }));
+    res.send(layout('Pages', body, { user: req.adminSession.username, active: 'pages', isSuperadmin: req.isSuperadmin }));
   } catch (err) {
     next(err);
   }
 });
 
-router.post('/admin/pages', async (req, res, next) => {
+router.post('/admin/pages', requireSuperadmin, async (req, res, next) => {
   try {
     const { page_id, page_name, page_access_token } = req.body || {};
     if (!page_id || !page_access_token) {
@@ -745,7 +769,7 @@ router.post('/admin/pages', async (req, res, next) => {
   }
 });
 
-router.post('/admin/pages/:pageId/delete', async (req, res, next) => {
+router.post('/admin/pages/:pageId/delete', requireSuperadmin, async (req, res, next) => {
   try {
     await deletePage(req.params.pageId);
     res.redirect('/admin/pages?ok=' + encodeURIComponent('Page deleted'));
@@ -754,7 +778,7 @@ router.post('/admin/pages/:pageId/delete', async (req, res, next) => {
   }
 });
 
-router.post('/admin/pages/:pageId/profile', async (req, res, next) => {
+router.post('/admin/pages/:pageId/profile', requireSuperadmin, async (req, res, next) => {
   try {
     const accessToken = await getAccessToken(req.params.pageId);
     if (!accessToken) {
@@ -765,6 +789,175 @@ router.post('/admin/pages/:pageId/profile', async (req, res, next) => {
       return res.redirect('/admin/pages?err=' + encodeURIComponent('Install failed: ' + result.error));
     }
     res.redirect('/admin/pages?ok=' + encodeURIComponent('Get Started installed'));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/users', requireSuperadmin, async (req, res, next) => {
+  try {
+    const [users, pages] = await Promise.all([adminUsers.listUsers(), listPages()]);
+    const me = req.adminSession.username;
+
+    const pageCheckboxes = (selected) =>
+      pages
+        .map(
+          (p) =>
+            `<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 12px 4px 0;font-size:13px;">
+              <input type="checkbox" name="allowed_pages" value="${escapeHtml(p.page_id)}"${selected.includes(p.page_id) ? ' checked' : ''} />
+              ${escapeHtml(p.page_name || p.page_id)}
+            </label>`
+        )
+        .join('') || '<span class="muted" style="font-size:13px;">No pages registered.</span>';
+
+    const rows = users
+      .map((u) => {
+        const allowed = Array.isArray(u.allowed_pages) ? u.allowed_pages : [];
+        const accessText =
+          u.role === 'superadmin'
+            ? '<span class="badge badge-secondary">All pages (superadmin)</span>'
+            : allowed.length
+              ? allowed
+                  .map((id) => {
+                    const p = pages.find((x) => x.page_id === id);
+                    return `<span class="badge badge-mono">${escapeHtml(p ? p.page_name || id : id)}</span>`;
+                  })
+                  .join(' ')
+              : '<span class="muted">None</span>';
+        const isSelf = u.username === me;
+        return `<tr>
+          <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ' <span class="muted" style="font-size:11px;">(you)</span>' : ''}</td>
+          <td><span class="badge ${u.role === 'superadmin' ? 'badge-secondary' : ''}">${escapeHtml(u.role)}</span></td>
+          <td>${accessText}</td>
+          <td class="cell-mono">${escapeHtml(new Date(u.created_at).toLocaleString())}</td>
+          <td>
+            <div class="row-actions">
+              <details style="position:relative;">
+                <summary class="btn btn-outline btn-sm" style="list-style:none;cursor:pointer;">Edit access</summary>
+                <form method="post" action="/admin/users/${encodeURIComponent(u.username)}/access" style="position:absolute;right:0;top:36px;z-index:10;background:hsl(var(--card));border:1px solid hsl(var(--border));border-radius:var(--radius);padding:14px;min-width:320px;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                  <div class="form-row">
+                    <label class="label">Role</label>
+                    <select class="select" name="role">
+                      <option value="user"${u.role === 'user' ? ' selected' : ''}>User</option>
+                      <option value="superadmin"${u.role === 'superadmin' ? ' selected' : ''}>Superadmin</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label class="label">Allowed pages</label>
+                    <div>${pageCheckboxes(allowed)}</div>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                </form>
+              </details>
+              ${isSelf ? '' : `<form class="inline-form" method="post" action="/admin/users/${encodeURIComponent(u.username)}/delete" onsubmit="return confirm('Delete user ${escapeHtml(u.username)}?');"><button type="submit" class="btn btn-destructive btn-sm">Delete</button></form>`}
+            </div>
+          </td>
+        </tr>`;
+      })
+      .join('');
+
+    const body = `
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Users</h1>
+          <p class="page-subtitle">Manage admin accounts and per-page access.</p>
+        </div>
+      </div>
+      ${flashFromQuery(req.query)}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Username</th><th>Role</th><th>Access</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+
+      <h2 class="section-title">Add user</h2>
+      <div class="card" style="max-width: 640px;">
+        <div class="card-header">
+          <h3 class="card-title">Create admin account</h3>
+          <p class="card-description">Choose role and which pages this user can view. Superadmins can manage everything.</p>
+        </div>
+        <form method="post" action="/admin/users">
+          <div class="card-content">
+            <div class="form-row">
+              <label class="label" for="username">Username</label>
+              <input class="input" id="username" type="text" name="username" required autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <label class="label" for="password">Password</label>
+              <input class="input" id="password" type="password" name="password" required autocomplete="new-password" minlength="8" />
+            </div>
+            <div class="form-row">
+              <label class="label">Role</label>
+              <select class="select" name="role">
+                <option value="user" selected>User (limited to selected pages)</option>
+                <option value="superadmin">Superadmin (full access)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="label">Allowed pages (ignored for superadmin)</label>
+              <div>${pageCheckboxes([])}</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <button type="submit" class="btn btn-primary">Create user</button>
+          </div>
+        </form>
+      </div>`;
+    res.send(layout('Users', body, { user: me, active: 'users', isSuperadmin: true }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/users', requireSuperadmin, async (req, res, next) => {
+  try {
+    const { username, password, role } = req.body || {};
+    let allowed = req.body.allowed_pages || [];
+    if (!Array.isArray(allowed)) allowed = [allowed];
+    if (!username || !password) {
+      return res.redirect('/admin/users?err=' + encodeURIComponent('Username and password required'));
+    }
+    if (String(password).length < 8) {
+      return res.redirect('/admin/users?err=' + encodeURIComponent('Password must be at least 8 characters'));
+    }
+    await adminUsers.createUser({
+      username: String(username).trim(),
+      password: String(password),
+      role: role === 'superadmin' ? 'superadmin' : 'user',
+      allowedPages: allowed.map(String),
+    });
+    res.redirect('/admin/users?ok=' + encodeURIComponent('User saved'));
+  } catch (err) {
+    res.redirect('/admin/users?err=' + encodeURIComponent(err.message));
+  }
+});
+
+router.post('/admin/users/:username/access', requireSuperadmin, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    const { role } = req.body || {};
+    let allowed = req.body.allowed_pages || [];
+    if (!Array.isArray(allowed)) allowed = [allowed];
+    await adminUsers.updateUserAccess({
+      username,
+      role: role === 'superadmin' ? 'superadmin' : 'user',
+      allowedPages: allowed.map(String),
+    });
+    res.redirect('/admin/users?ok=' + encodeURIComponent('Access updated for ' + username));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/users/:username/delete', requireSuperadmin, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    if (username === req.adminSession.username) {
+      return res.redirect('/admin/users?err=' + encodeURIComponent('You cannot delete your own account'));
+    }
+    await adminUsers.deleteUser(username);
+    res.redirect('/admin/users?ok=' + encodeURIComponent('User deleted'));
   } catch (err) {
     next(err);
   }
